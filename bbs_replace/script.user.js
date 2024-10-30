@@ -2,6 +2,7 @@
 // @name         社区内容替换
 // @namespace    http://tampermonkey.net/
 // @version      1.0.1
+// @license      MIT
 // @description  BBS社区内容替换
 // @author       PYY
 // @match        https://www.kuafuzys.com/thread-create-*.htm
