@@ -2,13 +2,12 @@
 // @name         社区内容替换
 // @namespace    http://tampermonkey.net/
 // @version      1.0.1
-// @description  try to take over the world!
+// @description  BBS社区内容替换
 // @author       PYY
 // @match        https://www.kuafuzys.com/thread-create-*.htm
 // @match        https://bbs.52huahua.cc/?thread-create-*.htm
 // @match        https://www.kuafuzys.com/post-update-*.htm
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=kuafuzys.com
-// @grant        none
 // ==/UserScript==
 
 
