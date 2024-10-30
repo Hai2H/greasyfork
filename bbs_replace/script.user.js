@@ -82,7 +82,6 @@
         if (element) {
             // 直接替换元素的内容
             element.innerHTML = userInput;
-
         } else {
             alert('未找到指定的元素');
         }
