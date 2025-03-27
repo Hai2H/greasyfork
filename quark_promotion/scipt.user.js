@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         夸克项目推广查询
 // @namespace    http://tampermonkey.net/
-// @version      1.0.1
+// @version      1.0.2
 // @license      MIT
 // @description  夸克项目推广查询!
 // @author       PYY
@@ -20,9 +20,9 @@
     // 定义一个函数来查找输入框并填写内容，然后触发搜索按钮
     function fillAndSubmit() {
         // 通过类名和占位符查找输入框
-        const inputElement = document.querySelector('input._input.bs[placeholder="请输入夸克UID查询"]');
+        const inputElement = document.querySelector('input[placeholder="请输入夸克UID查询"]');
         // 通过类名查找搜索按钮
-        const searchButton = document.querySelector('button.submit');
+        const searchButton = document.querySelector('div.submit');
 
         if (inputElement && searchButton) {
             // 如果找到输入框，填写夸克 UID
