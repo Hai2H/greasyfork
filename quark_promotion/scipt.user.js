@@ -1,11 +1,12 @@
 // ==UserScript==
 // @name         夸克项目推广查询
 // @namespace    http://tampermonkey.net/
-// @version      1.0.0
+// @version      1.0.1
 // @license      MIT
 // @description  夸克项目推广查询!
 // @author       PYY
 // @match        https://dt.bd.cn/main/quark_list**
+// @match        https://csj.sgj.cn/main/sfsjcx**
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=bd.cn
 // @grant        none
 // ==/UserScript==
