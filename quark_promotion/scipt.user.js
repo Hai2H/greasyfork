@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         夸克项目推广查询
 // @namespace    http://tampermonkey.net/
-// @version      1.0.2
+// @version      1.0.3
 // @license      MIT
 // @description  夸克项目推广查询!
 // @author       PYY
@@ -17,24 +17,23 @@
     // 要填写的夸克 UID
     const quarkUID = '100188018441';  // 请将此值替换为实际的夸克 UID
 
-    // 定义一个函数来查找输入框并填写内容，然后触发搜索按钮
-    function fillAndSubmit() {
-        // 通过类名和占位符查找输入框
-        const inputElement = document.querySelector('input[placeholder="请输入夸克UID查询"]');
-        // 通过类名查找搜索按钮
-        const searchButton = document.querySelector('div.submit');
-
-        if (inputElement && searchButton) {
-            // 如果找到输入框，填写夸克 UID
-            inputElement.value = quarkUID;
-            // 触发搜索按钮的点击事件
-            searchButton.click();
-            // 停止检查输入框和按钮的定时器
-            clearInterval(intervalId);
-        }
+    const inputElement = document.querySelector('input[placeholder="请输入夸克UID查询"]');
+    if (inputElement) {
+        inputElement.value = quarkUID;
+        // 触发 input 事件让 Vue 感知到输入框内容的变化
+        const inputEvent = new Event('input', { bubbles: true });
+        inputElement.dispatchEvent(inputEvent);
     }
 
-    // 每隔 500 毫秒检查一次输入框和按钮是否已经加载
-    const intervalId = setInterval(fillAndSubmit, 500);
 
+    // 找到查询 div 并触发点击事件
+    const submitDiv = document.querySelector('.submit');
+    if (submitDiv) {
+        const clickEvent = new MouseEvent('click', {
+            view: window,
+            bubbles: true,
+            cancelable: true
+        });
+        submitDiv.dispatchEvent(clickEvent);
+    }
 })();
