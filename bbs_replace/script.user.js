@@ -4,10 +4,9 @@
 // @match        https://www.kuafuzys.com/*
 // @match        https://bbs.52huahua.cc/*
 // @match        https://www.kuafuzy.com/*
-// @version      1.0
+// @version      1.0.1
 // @description  添加一个按钮点击后复制当前页面的 Cookie 信息到剪切板（兼容写法）
-// @author       You
-// @match        *://*/*
+// @author       PYY
 // @grant        none
 // ==/UserScript==
 
