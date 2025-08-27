@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         中小学智慧教育平台助手
 // @namespace    http://tampermonkey.net/
-// @version      2.3
+// @version      2.3.1
 // @description  提取 iframe 中 PDF，支持下载与 ConvertAPI 转换为 PPTX（Bearer 授权、多部分上传），
 //               带进度与日志；禁止页面全屏；美化浮动按钮；支持 API Key 配置与日志区打开。仅在顶层页面运行。
 // @match        https://*.smartedu.cn/*
