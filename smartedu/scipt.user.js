@@ -10,6 +10,7 @@
 // @grant        GM_setValue
 // @grant        GM_getValue
 // @grant        GM_addStyle
+// @connect      r3-ndr-private.ykt.cbern.com.cn
 // @connect      v2.convertapi.com
 // @noframes
 // ==/UserScript==
