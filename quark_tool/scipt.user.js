@@ -13,6 +13,7 @@
 
     const platform = "Kuake";
     const serverUrl = "http://127.0.0.1:82/biz/collection/save"; // ✅ 你的服务器接口
+    const checkUrl = "http://127.0.0.1:82/biz/collection/isExist"; // ✅ 检查文章是否存在的接口
 
     // ========== 工具函数 ==========
     // 格式化日期为 YYYY-MM-DD HH:mm:ss
@@ -93,6 +94,29 @@
     max-height: 60vh; overflow: auto;
   `;
 
+    // 添加状态灯
+    const statusLight = document.createElement("div");
+    statusLight.id = "status-light";
+    statusLight.style = `
+        width: 12px; height: 12px; border-radius: 50%;
+        background: #ccc; display: inline-block;
+        margin-left: 10px; vertical-align: middle;
+        transition: background 0.3s ease;
+    `;
+
+    const statusText = document.createElement("span");
+    statusText.id = "status-text";
+    statusText.textContent = "未检查";
+    statusText.style = "margin-left: 5px; vertical-align: middle; font-size: 12px; color: #666;";
+
+    const statusContainer = document.createElement("div");
+    statusContainer.style = "margin-bottom:10px;padding:8px;background:#f9f9f9;border-radius:4px;";
+    statusContainer.innerHTML = "<strong>文章状态:</strong> ";
+    statusContainer.appendChild(statusLight);
+    statusContainer.appendChild(statusText);
+
+    logBox.appendChild(statusContainer);
+
     // 添加账号选择下拉框
     const accountSelectContainer = document.createElement("div");
     accountSelectContainer.style = "margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid #ddd;";
@@ -124,13 +148,24 @@
         accountSelect.appendChild(option);
     });
 
-    // 设置默认选中第一个，并初始化 bindCookieId
-    accountSelect.value = accounts[0].value;
-    collection.bindCookieId = accounts[0].value;
+    // 从缓存读取上次选择的账号
+    const STORAGE_KEY = 'quark_tool_bindCookieId';
+    const savedBindCookieId = localStorage.getItem(STORAGE_KEY);
+    
+    // 判断保存的值是否在账号列表中
+    const isValidAccount = accounts.some(acc => acc.value === savedBindCookieId);
+    const defaultBindCookieId = isValidAccount ? savedBindCookieId : accounts[0].value;
+    
+    // 设置选中的账号并初始化 bindCookieId
+    accountSelect.value = defaultBindCookieId;
+    collection.bindCookieId = defaultBindCookieId;
 
     // 监听选择变化
     accountSelect.addEventListener("change", (e) => {
-        collection.bindCookieId = e.target.value;
+        const selectedValue = e.target.value;
+        collection.bindCookieId = selectedValue;
+        // 保存到缓存
+        localStorage.setItem(STORAGE_KEY, selectedValue);
         addLog("已切换到账号: " + e.target.options[e.target.selectedIndex].text);
     });
 
@@ -169,12 +204,58 @@
     logBox.appendChild(logArea);
     document.body.appendChild(logBox);
 
-    addLog("手动模式已启动。请按步骤点击按钮。");
+    addLog("✅ 脚本已启动，正在自动检测文章状态...");
 
     // ========== 各步骤逻辑 ==========
 
+    // 检查文章是否已存在
+    async function checkArticleExists() {
+        if (!collection.title) {
+            updateStatusLight('gray', '未检查');
+            return false;
+        }
+
+        updateStatusLight('#FFA500', '检查中...');
+        
+        try {
+            const response = await fetch(checkUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: collection.title
+            });
+            
+            const data = await response.json();
+            
+            // 解析响应格式：{"code":200,"msg":"操作成功","data":false}
+            // data 字段为 true 表示已存在，false 表示不存在
+            const exists = data.data === true || data.data === 'true' || data.data === 1 || data.data === '1';
+            
+            if (exists) {
+                updateStatusLight('#f44336', '文章已存在');
+                addLog("⚠️ 该文章已在数据库中");
+                return true;
+            } else {
+                updateStatusLight('#4CAF50', '文章不存在');
+                addLog("✅ 该文章为新内容");
+                return false;
+            }
+        } catch (err) {
+            updateStatusLight('#FF9800', '检查失败');
+            addLog("❌ 检查接口失败: " + err.message);
+            return false;
+        }
+    }
+
+    // 更新状态灯
+    function updateStatusLight(color, text) {
+        const light = document.getElementById('status-light');
+        const textSpan = document.getElementById('status-text');
+        if (light) light.style.background = color;
+        if (textSpan) textSpan.textContent = text;
+    }
+
     // 统一提取所有内容的函数
-    function extractAll() {
+    async function extractAll() {
         addLog("开始提取所有内容...");
 
         // 第一步：先提取夸克链接
@@ -200,7 +281,7 @@
 
         // 第二步：提取基本信息和节点
         addLog("2. 提取标题、作者、节点和资源链接...");
-        extractMeta();
+        await extractMeta();
 
         // 第三步：提取标签
         addLog("3. 提取标签...");
@@ -214,7 +295,7 @@
         addLog("可以点击【查看数据】查看完整数据，然后点击【上传服务器】");
     }
 
-    function extractMeta() {
+    async function extractMeta() {
         // 提取当前页面链接
         const currentUrl = window.location.href;
         try {
@@ -422,5 +503,36 @@
             if (fixCommentInput()) observer.disconnect();
         });
         observer.observe(document.body, { childList: true, subtree: true });
+    }
+
+    // 页面加载完成后自动检查文章状态
+    function autoCheckOnLoad() {
+        // 立即提取标题并检查
+        const titleEl = document.querySelector("h4.break-all.font-weight-bold");
+        if (titleEl) {
+            const title = titleEl.textContent.trim().replace(/\s+/g, " ");
+            collection.title = title;
+            // 自动检查文章是否已存在
+            checkArticleExists();
+        } else {
+            // 如果立即没找到，使用观察者等待元素出现
+            const checkObserver = new MutationObserver(() => {
+                const titleEl = document.querySelector("h4.break-all.font-weight-bold");
+                if (titleEl) {
+                    const title = titleEl.textContent.trim().replace(/\s+/g, " ");
+                    collection.title = title;
+                    checkArticleExists();
+                    checkObserver.disconnect();
+                }
+            });
+            checkObserver.observe(document.body, { childList: true, subtree: true });
+        }
+    }
+
+    // 立即执行一次（DOM加载完成后）
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', autoCheckOnLoad);
+    } else {
+        autoCheckOnLoad();
     }
 })();
