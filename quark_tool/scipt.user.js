@@ -395,4 +395,32 @@
         addLog("当前收集数据：");
         addLog(JSON.stringify(collection, null, 2));
     }
+
+    function fixCommentInput() {
+        const el = document.querySelector('#comment_input');
+        if (!el) return false;
+
+        // 设置固定在底部的样式
+        el.style.position = 'fixed';
+        el.style.bottom = '0';
+        el.style.width = '50%';
+        el.style.background = '#fff';
+        el.style.borderTop = '1px solid #ccc';
+        el.style.padding = '10px';
+        el.style.display = 'flex';
+        el.style.gap = '8px';
+        el.style.boxShadow = '0 -2px 5px rgba(0,0,0,0.1)';
+        el.style.zIndex = '999999';
+
+        return true;
+    }
+
+    // 页面加载后尝试执行一次
+    if (!fixCommentInput()) {
+        // 若页面是异步加载的元素，使用定时器轮询直到找到目标
+        const observer = new MutationObserver(() => {
+            if (fixCommentInput()) observer.disconnect();
+        });
+        observer.observe(document.body, { childList: true, subtree: true });
+    }
 })();
