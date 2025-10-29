@@ -150,7 +150,7 @@
 
     // ========== 控制按钮 ==========
     const btns = [
-        { text: "提取所有内容", fn: extractAll },
+        { text: "提取所有内容", fn: async () => await extractAll() },
         { text: "上传服务器", fn: uploadServer },
         { text: "查看数据", fn: showData },
     ];
@@ -302,69 +302,75 @@
         }
     }
 
-    function extractContent() {
+    async function extractContent() {
         const contentXPath = "/html/body/main/div/div/div[2]/div[1]/div[2]";
         const contentEl = getElementByXPath(contentXPath);
 
-        if (contentEl) {
-            // 克隆元素以便修改
-            const clonedContent = contentEl.cloneNode(true);
+        if (!contentEl) {
+            addLog("未找到正文区域。");
+            return;
+        }
 
-            try {
-                let deleteCount = 0;
+        // 克隆节点
+        const clonedContent = contentEl.cloneNode(true);
 
-                // 使用 class 选择器精确删除元素
-                // 查找并删除第一个元素：class 包含 tt-license
-                const element1 = clonedContent.querySelector('.tt-license');
-                if (element1 && element1.parentNode) {
-                    element1.parentNode.removeChild(element1);
+        // 删除多余的提示框元素
+        try {
+            let deleteCount = 0;
+            const removeList = ['.tt-license', '.alert.alert-success', '.mt-3'];
+            removeList.forEach(sel => {
+                const el = clonedContent.querySelector(sel);
+                if (el && el.parentNode) {
+                    el.parentNode.removeChild(el);
                     deleteCount++;
-                }
-
-                // 查找并删除第二个元素：class 包含 alert alert-success
-                const element2 = clonedContent.querySelector('.alert.alert-success');
-                if (element2 && element2.parentNode) {
-                    element2.parentNode.removeChild(element2);
-                    deleteCount++;
-                }
-
-                // 查找并删除第二个元素：class 包含 alert alert-success
-                const element3 = clonedContent.querySelector('.mt-3');
-                if (element3 && element3.parentNode) {
-                    element3.parentNode.removeChild(element3);
-                    deleteCount++;
-                }
-
-                addLog("正文提取成功，已删除 " + deleteCount + " 个指定元素。");
-            } catch (e) {
-                addLog("删除元素时出错: " + e.message);
-            }
-
-            // 将所有的 img 标签的 src 转换为完整链接
-            const allImgs = clonedContent.querySelectorAll('img');
-            let imgCount = 0;
-            allImgs.forEach(img => {
-                try {
-                    const src = img.getAttribute('src');
-                    if (src && !src.startsWith('http://') && !src.startsWith('https://') && !src.startsWith('//')) {
-                        // 相对路径，转换为绝对路径
-                        const absoluteUrl = new URL(src, window.location.href).href;
-                        img.setAttribute('src', absoluteUrl);
-                        imgCount++;
-                    }
-                } catch (e) {
-                    console.error('转换图片链接失败:', e);
                 }
             });
-
-            if (imgCount > 0) {
-                addLog("已更新 " + imgCount + " 个图片链接为完整 URL。");
-            }
-
-            collection.content = clonedContent.outerHTML;
-        } else {
-            addLog("未找到正文区域。");
+            addLog(`正文提取成功，已删除 ${deleteCount} 个指定元素。`);
+        } catch (e) {
+            addLog("删除元素时出错: " + e.message);
         }
+
+        // ✅ 处理图片：转成 Base64 并替换
+        const imgEls = clonedContent.querySelectorAll("img");
+        let converted = 0;
+
+        const convertToBase64 = async (url) => {
+            try {
+                const response = await fetch(url);
+                const blob = await response.blob();
+                return await new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onloadend = () => resolve(reader.result);
+                    reader.onerror = reject;
+                    reader.readAsDataURL(blob);
+                });
+            } catch (err) {
+                console.error("图片转Base64失败：", err);
+                return url; // 保留原始地址
+            }
+        };
+
+        // 异步转换所有图片
+        const tasks = Array.from(imgEls).map(async (img) => {
+            const src = img.getAttribute("src");
+            if (!src) return;
+            try {
+                // 相对路径转绝对路径
+                const absoluteUrl = new URL(src, window.location.href).href;
+                const base64 = await convertToBase64(absoluteUrl);
+                img.setAttribute("src", base64);
+                converted++;
+            } catch (e) {
+                console.warn("处理图片失败：", src, e);
+            }
+        });
+
+        await Promise.all(tasks);
+        addLog(`共处理图片 ${imgEls.length} 张，成功转为Base64：${converted} 张。`);
+
+        // 保存完整 HTML
+        collection.content = clonedContent.outerHTML;
+        addLog("✅ 正文提取完成并包含Base64图片数据。");
     }
 
 
