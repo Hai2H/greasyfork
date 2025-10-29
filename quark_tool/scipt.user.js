@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         夸克网盘资源社-文章采集
+// @name         夸克资源采集
 // @namespace    http://tampermonkey.net/
 // @version      V1.0.0
 // @description  文章采集
@@ -12,8 +12,8 @@
     'use strict';
 
     const platform = "Kuake";
-    const serverUrl = "http://127.0.0.1:82/biz/collection/save"; // ✅ 你的服务器接口
-    const checkUrl = "http://127.0.0.1:82/biz/collection/isExist"; // ✅ 检查文章是否存在的接口
+    const serverUrl = "https://zys.52huahua.cn/api/biz/collection/save"; // ✅ 你的服务器接口
+    const checkUrl = "https://zys.52huahua.cn/api/biz/collection/isExist"; // ✅ 检查文章是否存在的接口
 
     // ========== 工具函数 ==========
     // 格式化日期为 YYYY-MM-DD HH:mm:ss
@@ -151,11 +151,11 @@
     // 从缓存读取上次选择的账号
     const STORAGE_KEY = 'quark_tool_bindCookieId';
     const savedBindCookieId = localStorage.getItem(STORAGE_KEY);
-    
+
     // 判断保存的值是否在账号列表中
     const isValidAccount = accounts.some(acc => acc.value === savedBindCookieId);
     const defaultBindCookieId = isValidAccount ? savedBindCookieId : accounts[0].value;
-    
+
     // 设置选中的账号并初始化 bindCookieId
     accountSelect.value = defaultBindCookieId;
     collection.bindCookieId = defaultBindCookieId;
@@ -216,20 +216,20 @@
         }
 
         updateStatusLight('#FFA500', '检查中...');
-        
+
         try {
             const response = await fetch(checkUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: collection.title
             });
-            
+
             const data = await response.json();
-            
+
             // 解析响应格式：{"code":200,"msg":"操作成功","data":false}
             // data 字段为 true 表示已存在，false 表示不存在
             const exists = data.data === true || data.data === 'true' || data.data === 1 || data.data === '1';
-            
+
             if (exists) {
                 updateStatusLight('#f44336', '文章已存在');
                 addLog("⚠️ 该文章已在数据库中");
