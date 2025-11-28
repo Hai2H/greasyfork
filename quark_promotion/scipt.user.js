@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         夸克项目推广查询
 // @namespace    http://tampermonkey.net/
-// @version      1.2.0
+// @version      1.2.1
 // @license      MIT
 // @description  多UID选择查询（列表按钮形式）+合计列+美化浮动窗口+拖动功能！
 // @author       PYY
