@@ -67,10 +67,10 @@
     }
 
     function calculateTotal(cells) {
-        const col1 = parseFloat(cells[1]?.textContent.trim()) || 0;
-        const col2 = parseFloat(cells[2]?.textContent.trim()) || 0;
-        const col3 = parseFloat(cells[3]?.textContent.trim()) || 0;
-        const col4 = parseFloat(cells[4]?.textContent.trim()) || 0;
+        const col1 = parseFloat(cells[2]?.textContent.trim()) || 0;
+        const col2 = parseFloat(cells[3]?.textContent.trim()) || 0;
+        const col3 = parseFloat(cells[4]?.textContent.trim()) || 0;
+        const col4 = parseFloat(cells[5]?.textContent.trim()) || 0;
         return col1 * 7 + col2 * 3 + col3 * 0.3 + col4;
     }
 
