@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         夸克资源助手
 // @namespace    http://tampermonkey.net/
-// @version      6.1.0
+// @version      6.1.1
 // @description  💬智能回帖 | 📦资源采集 | 📊推广查询 - 简洁实用的多功能助手
 // @match        https://kuafuzys.net/*
 // @match        https://www.kuafuzy.com/*
@@ -27,7 +27,7 @@
     // 配置模块
     // ========================================
     const CONFIG = {
-        version: '6.1.0',
+        version: '6.1.1',
         
         // 选择器配置
         selectors: {
@@ -1367,7 +1367,7 @@
             UI.log(JSON.stringify(CollectionData.data, null, 2));
         },
         
-        getCookie: () => {
+        getCookie: async () => {
             try {
                 // 获取所有 cookie
                 const cookies = document.cookie.split(';');
@@ -1386,6 +1386,28 @@
                     const cookieString = `_ok2_=${ok2Value}`;
                     UI.log('✅ 成功获取 Cookie', 'success');
                     UI.log(cookieString, 'info');
+                    
+                    // 尝试获取 Cookie 过期时间（通过 Cookie Store API）
+                    if (window.cookieStore) {
+                        try {
+                            const cookieInfo = await cookieStore.get('_ok2_');
+                            if (cookieInfo && cookieInfo.expires) {
+                                const expiresDate = new Date(cookieInfo.expires);
+                                const now = new Date();
+                                const daysLeft = Math.floor((expiresDate - now) / (1000 * 60 * 60 * 24));
+                                const hoursLeft = Math.floor(((expiresDate - now) % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+                                
+                                UI.log(`📅 过期时间: ${Utils.formatDateTime(expiresDate)}`, 'info');
+                                UI.log(`⏰ 剩余时间: ${daysLeft}天 ${hoursLeft}小时`, 'info');
+                            } else {
+                                UI.log('ℹ️ Cookie 无过期时间（会话Cookie）', 'info');
+                            }
+                        } catch (err) {
+                            UI.log('ℹ️ 无法获取过期时间（Cookie Store API 不可用）', 'info');
+                        }
+                    } else {
+                        UI.log('ℹ️ 浏览器不支持 Cookie Store API，无法获取过期时间', 'info');
+                    }
                     
                     // 复制到剪贴板
                     if (navigator.clipboard && navigator.clipboard.writeText) {
