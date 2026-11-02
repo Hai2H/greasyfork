@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         夸克资源助手
 // @namespace    http://tampermonkey.net/
-// @version      6.1.4
+// @version      6.1.5
 // @description  💬智能回帖 | 📦资源采集 | 📊推广查询 - 简洁实用的多功能助手
 // @match        https://kuafuzys.net/*
 // @match        https://www.kuafuzy.com/*
@@ -28,7 +28,7 @@
     // 配置模块
     // ========================================
     const CONFIG = {
-        version: '6.1.4',
+        version: '6.1.5',
         
         // 选择器配置
         selectors: {
@@ -734,6 +734,7 @@
             
             // 启动懒加载观察
             if (Utils.isPromotionPage()) {
+                Promotion.initApiHook();
                 Promotion.observeLazyLoading();
                 Promotion.addWindowStats();
             }
@@ -1525,10 +1526,22 @@
         },
         
         addTotalColumnToRow: (row) => {
-            if (row.querySelector('.custom-total-cell')) return;
-
             const cells = row.querySelectorAll('div');
-            const total = Promotion.calculateTotal(cells);
+            const dateKey = Promotion.parseDateKey((cells[0]?.textContent || '').trim());
+            let total = null;
+            // 优先用 API 数据（按日期一一对应，不受页面重渲染影响）
+            if (dateKey && Promotion.apiRows[dateKey]) {
+                total = Promotion.calculateTotalFromApi(dateKey);
+            } else {
+                total = Promotion.calculateTotal(cells);
+            }
+            if (total === null) return;
+
+            const existing = row.querySelector('.custom-total-cell');
+            if (existing) {
+                existing.textContent = total.toFixed(2);
+                return;
+            }
 
             const sumDiv = document.createElement('div');
             sumDiv.textContent = total.toFixed(2);
@@ -1549,19 +1562,141 @@
             UI.log('✅ 已添加合计列');
         },
         
-        addWindowStats: () => {
-            // 在页面统计面板(.board)末尾注入"近30天累计转存"、"近90天累计转存"两项
-            // 口径：累计转存 = 移动转存数 + PC转存数；按表格「日期」列归属窗口（含今天）
+        // ============ API 数据采集（拦截页面自身请求，按日期一一对应） ============
+        apiRows: {},
+
+        initApiHook: () => {
+            // hook fetch
+            const origFetch = window.fetch;
+            if (origFetch && !window.__quarkApiHooked) {
+                window.__quarkApiHooked = true;
+                window.fetch = function (...args) {
+                    const p = origFetch.apply(this, args);
+                    try {
+                        const url = typeof args[0] === 'string' ? args[0] : (args[0] && args[0].url) || '';
+                        if (/\/g_sfxmsj|\/sfsjcx/.test(url)) {
+                            p.then((resp) => {
+                                try {
+                                    resp.clone().json().then((json) => {
+                                        if (json && Array.isArray(json.data)) {
+                                            Promotion.ingestApiData(json.data);
+                                        }
+                                    }).catch(() => {});
+                                } catch (e) {}
+                                return resp;
+                            });
+                        }
+                    } catch (e) {}
+                    return p;
+                };
+            }
+
+            // hook XMLHttpRequest 兜底
+            if (!window.__quarkXhrHooked) {
+                window.__quarkXhrHooked = true;
+                const origOpen = XMLHttpRequest.prototype.open;
+                XMLHttpRequest.prototype.open = function (method, url) {
+                    this.__quarkApiUrl = String(url);
+                    return origOpen.apply(this, arguments);
+                };
+                const origSend = XMLHttpRequest.prototype.send;
+                XMLHttpRequest.prototype.send = function () {
+                    this.addEventListener('load', () => {
+                        try {
+                            if (/\/g_sfxmsj|\/sfsjcx/.test(this.__quarkApiUrl || '')) {
+                                const json = JSON.parse(this.responseText);
+                                if (json && Array.isArray(json.data)) {
+                                    Promotion.ingestApiData(json.data);
+                                }
+                            }
+                        } catch (e) {}
+                    });
+                    return origSend.apply(this, arguments);
+                };
+            }
+        },
+
+        parseDateKey: (text) => {
+            const m = text.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+            if (!m) return null;
+            const d = new Date(parseInt(m[1], 10), parseInt(m[2], 10) - 1, parseInt(m[3], 10));
+            return isNaN(d.getTime()) ? null : d;
+        },
+
+        calculateTotalFromApi: (dateKey) => {
+            const r = Promotion.apiRows[dateKey];
+            if (!r) return null;
+            const c1 = parseFloat(r.u_count1) || 0;   // 移动拉新
+            const c2 = parseFloat(r.u_count2) || 0;   // PC拉新
+            const c3 = parseFloat(r.u_count3) || 0;   // 移动转存
+            const c4 = parseFloat(r.u_count4) || 0;   // PC转存
+            const m1 = parseFloat(r.u_money1) || 0;   // 会员分成
+            return c1 * 10 + c2 * 3 + c3 * 0.47 + c4 * 0.22 + m1;
+        },
+
+        ingestApiData: (rows) => {
+            let added = 0;
+            rows.forEach((r) => {
+                if (r.date_str && !Promotion.apiRows[r.date_str]) {
+                    Promotion.apiRows[r.date_str] = r;
+                    added++;
+                }
+            });
+            if (added === 0 && Object.keys(Promotion.apiRows).length === 0) return;
+            // 更新 30/90 天面板
+            Promotion.updateWindowStatsFromApi();
+            // 页面每次重渲染后，按日期重新对齐合计列
+            Promotion.addHeaderColumn();
+            Promotion.addTotalToAllRows();
+        },
+
+        updateWindowStatsFromApi: () => {
             const board = document.querySelector('.board');
             if (!board) return;
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const start30 = new Date(today);
+            start30.setDate(today.getDate() - 29);
+            const start90 = new Date(today);
+            start90.setDate(today.getDate() - 89);
 
-            const parseDate = (text) => {
-                const m = text.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
-                if (!m) return null;
-                const d = new Date(parseInt(m[1], 10), parseInt(m[2], 10) - 1, parseInt(m[3], 10));
-                return isNaN(d.getTime()) ? null : d;
-            };
+            let sum30 = 0;
+            let sum90 = 0;
+            Object.keys(Promotion.apiRows).forEach((ds) => {
+                const d = Promotion.parseDateKey(ds);
+                if (!d) return;
+                const r = Promotion.apiRows[ds];
+                const total = (parseFloat(r.u_count3) || 0) + (parseFloat(r.u_count4) || 0);
+                if (d >= start30 && d <= today) sum30 += total;
+                if (d >= start90 && d <= today) sum90 += total;
+            });
+            Promotion.setWindowStat('d30', '近30天累计转存', sum30);
+            Promotion.setWindowStat('d90', '近90天累计转存', sum90);
+        },
 
+        setWindowStat: (key, label, value) => {
+            const board = document.querySelector('.board');
+            if (!board) return;
+            const fmt = (v) => Number.isInteger(v) ? String(v) : v.toFixed(2);
+            let item = board.querySelector('.board_item.quark-stats-item[data-key="' + key + '"]');
+            if (!item) {
+                item = document.createElement('div');
+                item.className = 'board_item quark-stats-item';
+                item.setAttribute('data-key', key);
+                const num = document.createElement('div');
+                num.className = 'num';
+                const desc = document.createElement('div');
+                desc.className = 'desc';
+                item.appendChild(num);
+                item.appendChild(desc);
+                board.appendChild(item);
+            }
+            item.querySelector('.num').textContent = fmt(value);
+            item.querySelector('.desc').textContent = label;
+        },
+
+        addWindowStats: () => {
+            // 兜底：无 API 数据时按 DOM 计算（API 数据到达后由 updateWindowStatsFromApi 接管）
             const today = new Date();
             today.setHours(0, 0, 0, 0);
             const start30 = new Date(today);
@@ -1573,7 +1708,7 @@
             let sum90 = 0;
             document.querySelectorAll('.row.table_body_item').forEach((row) => {
                 const cells = row.querySelectorAll('div');
-                const date = parseDate((cells[0]?.textContent || '').trim());
+                const date = Promotion.parseDateKey((cells[0]?.textContent || '').trim());
                 if (!date) return;
                 const mobile = parseFloat(cells[4]?.textContent.trim()) || 0;
                 const pc = parseFloat(cells[5]?.textContent.trim()) || 0;
@@ -1582,29 +1717,8 @@
                 if (date >= start90 && date <= today) sum90 += total;
             });
 
-            const fmt = (v) => Number.isInteger(v) ? String(v) : v.toFixed(2);
-            const items = [
-                { key: 'd30', label: '近30天累计转存', value: fmt(sum30) },
-                { key: 'd90', label: '近90天累计转存', value: fmt(sum90) }
-            ];
-
-            items.forEach((it) => {
-                let item = board.querySelector('.board_item.quark-stats-item[data-key="' + it.key + '"]');
-                if (!item) {
-                    item = document.createElement('div');
-                    item.className = 'board_item quark-stats-item';
-                    item.setAttribute('data-key', it.key);
-                    const num = document.createElement('div');
-                    num.className = 'num';
-                    const desc = document.createElement('div');
-                    desc.className = 'desc';
-                    item.appendChild(num);
-                    item.appendChild(desc);
-                    board.appendChild(item);
-                }
-                item.querySelector('.num').textContent = it.value;
-                item.querySelector('.desc').textContent = it.label;
-            });
+            Promotion.setWindowStat('d30', '近30天累计转存', sum30);
+            Promotion.setWindowStat('d90', '近90天累计转存', sum90);
         },
         
         observeLazyLoading: () => {
@@ -1618,7 +1732,20 @@
                 observer.observe(tableBody, { childList: true, subtree: true });
             }
 
-            // 兜底：滚动懒加载页面（如 g_sfxmsj）即使容器选择器不同，滚动后也会重算
+            // 兜底1：页面重渲染可能整体替换表格容器，用 body 级观察确保合计列始终对齐
+            let domTimer = null;
+            const bodyObserver = new MutationObserver(() => {
+                if (domTimer) return;
+                domTimer = setTimeout(() => {
+                    domTimer = null;
+                    Promotion.addHeaderColumn();
+                    Promotion.addTotalToAllRows();
+                    Promotion.addWindowStats();
+                }, 200);
+            });
+            bodyObserver.observe(document.body, { childList: true, subtree: true });
+
+            // 兜底2：滚动懒加载页面（如 g_sfxmsj）即使容器选择器不同，滚动后也会重算
             let scrollTimer = null;
             window.addEventListener('scroll', () => {
                 if (scrollTimer) return;
