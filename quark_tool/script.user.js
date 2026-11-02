@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         夸克资源助手
 // @namespace    http://tampermonkey.net/
-// @version      6.1.6
+// @version      6.1.7
 // @description  💬智能回帖 | 📦资源采集 | 📊推广查询 - 简洁实用的多功能助手
 // @match        https://kuafuzys.net/*
 // @match        https://www.kuafuzy.com/*
@@ -28,7 +28,7 @@
     // 配置模块
     // ========================================
     const CONFIG = {
-        version: '6.1.6',
+        version: '6.1.7',
         
         // 选择器配置
         selectors: {
@@ -1812,6 +1812,8 @@
         },
 
         addWindowStats: () => {
+            // 已有 API 数据时统计以 API 为准，DOM 兜底直接退出，防止覆盖已算好的全量值
+            if (Object.keys(Promotion.apiRows).length > 0) return;
             // 兜底：无 API 数据时按 DOM 计算（API 数据到达后由 updateWindowStatsFromApi 接管）
             const today = new Date();
             today.setHours(0, 0, 0, 0);
