@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         夸克资源助手
 // @namespace    http://tampermonkey.net/
-// @version      6.1.5
+// @version      6.1.6
 // @description  💬智能回帖 | 📦资源采集 | 📊推广查询 - 简洁实用的多功能助手
 // @match        https://kuafuzys.net/*
 // @match        https://www.kuafuzy.com/*
@@ -28,7 +28,7 @@
     // 配置模块
     // ========================================
     const CONFIG = {
-        version: '6.1.5',
+        version: '6.1.6',
         
         // 选择器配置
         selectors: {
@@ -1575,6 +1575,12 @@
                     try {
                         const url = typeof args[0] === 'string' ? args[0] : (args[0] && args[0].url) || '';
                         if (/\/g_sfxmsj|\/sfsjcx/.test(url)) {
+                            try {
+                                const opts = args[1];
+                                if (opts && typeof opts.body === 'string') {
+                                    Promotion.captureMetaFromBody(opts.body);
+                                }
+                            } catch (e2) {}
                             p.then((resp) => {
                                 try {
                                     resp.clone().json().then((json) => {
@@ -1601,6 +1607,11 @@
                 };
                 const origSend = XMLHttpRequest.prototype.send;
                 XMLHttpRequest.prototype.send = function () {
+                    try {
+                        if (typeof arguments[0] === 'string') {
+                            Promotion.captureMetaFromBody(arguments[0]);
+                        }
+                    } catch (e) {}
                     this.addEventListener('load', () => {
                         try {
                             if (/\/g_sfxmsj|\/sfsjcx/.test(this.__quarkApiUrl || '')) {
@@ -1632,6 +1643,111 @@
             const c4 = parseFloat(r.u_count4) || 0;   // PC转存
             const m1 = parseFloat(r.u_money1) || 0;   // 会员分成
             return c1 * 10 + c2 * 3 + c3 * 0.47 + c4 * 0.22 + m1;
+        },
+
+        // ============ 自动补齐：无需滚动，直接拉取到覆盖90天 ============
+        apiMeta: null,
+        apiUid: null,
+        autoFetching: false,
+        autoFetchedFor: null,
+        requestedPages: {},
+
+        captureMetaFromBody: (bodyStr) => {
+            if (!bodyStr || typeof bodyStr !== 'string') return;
+            try {
+                const params = new URLSearchParams(bodyStr);
+                const auth_key = params.get('auth_key');
+                const uid = params.get('bs_key1');
+                const page = params.get('page');
+                if (page) Promotion.requestedPages[String(page)] = true;
+                if (!auth_key || !uid) return;
+
+                // UID 切换时清空旧数据
+                if (Promotion.apiUid && Promotion.apiUid !== uid) {
+                    Promotion.apiRows = {};
+                    Promotion.requestedPages = {};
+                    Promotion.autoFetchedFor = null;
+                }
+                Promotion.apiUid = uid;
+                Promotion.apiMeta = {
+                    app_id: params.get('app_id') || '90',
+                    auth_key: auth_key,
+                    uid: uid,
+                    u_lx: params.get('u_lx') || '1'
+                };
+                Promotion.maybeAutoFetch();
+            } catch (e) {}
+        },
+
+        maybeAutoFetch: () => {
+            if (!Promotion.apiMeta || Promotion.autoFetching) return;
+            if (Promotion.autoFetchedFor === Promotion.apiMeta.uid) return;
+            Promotion.autoFetching = true;
+            // 等页面自己的首屏请求先落定
+            setTimeout(() => Promotion.autoFetchPages(), 1200);
+        },
+
+        apiFetch: (body) => {
+            return window.fetch('https://csj.sgj.cn/main/g_sfxmsj', {
+                method: 'POST',
+                headers: {
+                    'content-type': 'application/x-www-form-urlencoded; charset=UTF-8',
+                    'x-requested-with': 'XMLHttpRequest',
+                    'accept': '*/*'
+                },
+                body: body,
+                credentials: 'include',
+                referrer: location.href
+            }).then((resp) => {
+                if (!resp.ok) throw new Error('HTTP ' + resp.status);
+                return resp;
+            });
+        },
+
+        autoFetchPages: async () => {
+            const meta = Promotion.apiMeta;
+            try {
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                const start90 = new Date(today);
+                start90.setDate(today.getDate() - 89);
+                let page = 1;
+                const maxPages = 12;
+                let covered = false;
+
+                while (page <= maxPages && !covered) {
+                    const pageStr = String(page);
+                    if (!Promotion.requestedPages[pageStr]) {
+                        const body = 'app_id=' + encodeURIComponent(meta.app_id || '90') +
+                            '&app=&u_lx=' + encodeURIComponent(meta.u_lx || '1') +
+                            '&auth_key=' + encodeURIComponent(meta.auth_key) +
+                            '&page=' + page + '&limit=20&str=&end=&bs_key1=' + encodeURIComponent(meta.uid) +
+                            '&date_str=';
+                        await Promotion.apiFetch(body);
+                        await Utils.delay(400);
+                    }
+
+                    // 检查累计数据是否已覆盖90天
+                    let oldest = null;
+                    Object.keys(Promotion.apiRows).forEach((ds) => {
+                        const d = Promotion.parseDateKey(ds);
+                        if (d && (!oldest || d < oldest)) oldest = d;
+                    });
+                    if (oldest && oldest <= start90) {
+                        covered = true;
+                        break;
+                    }
+                    page++;
+                }
+                UI.log(covered ? '✅ 已自动补齐近90天数据' : '⚠️ 自动拉取已达上限，可继续下滑加载');
+            } catch (e) {
+                UI.log('❌ 自动拉取失败: ' + (e && e.message ? e.message : e));
+            } finally {
+                Promotion.autoFetching = false;
+                if (Promotion.apiMeta) {
+                    Promotion.autoFetchedFor = Promotion.apiMeta.uid;
+                }
+            }
         },
 
         ingestApiData: (rows) => {
