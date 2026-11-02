@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         夸克资源助手
 // @namespace    http://tampermonkey.net/
-// @version      6.1.2
+// @version      6.1.4
 // @description  💬智能回帖 | 📦资源采集 | 📊推广查询 - 简洁实用的多功能助手
 // @match        https://kuafuzys.net/*
 // @match        https://www.kuafuzy.com/*
@@ -10,6 +10,7 @@
 // @match        https://kuakezy.cc/*
 // @match        https://dt.bd.cn/main/quark_list**
 // @match        https://csj.sgj.cn/main/sfsjcx**
+// @match        https://csj.sgj.cn/main/g_sfxmsj**
 // @grant        GM_addStyle
 // @grant        GM_getValue
 // @grant        GM_setValue
@@ -27,7 +28,7 @@
     // 配置模块
     // ========================================
     const CONFIG = {
-        version: '6.1.2',
+        version: '6.1.4',
         
         // 选择器配置
         selectors: {
@@ -123,7 +124,8 @@
         isUserListPage: () => /\/user-thread-\d+(-\d+)?\.htm/.test(location.href),
         
         isPromotionPage: () => /dt\.bd\.cn\/main\/quark_list/.test(location.href) || 
-                               /csj\.sgj\.cn\/main\/sfsjcx/.test(location.href),
+                               /csj\.sgj\.cn\/main\/sfsjcx/.test(location.href) ||
+                               /csj\.sgj\.cn\/main\/g_sfxmsj/.test(location.href),
         
         formatDateTime: (date) => {
             const pad = (n) => String(n).padStart(2, '0');
@@ -733,6 +735,7 @@
             // 启动懒加载观察
             if (Utils.isPromotionPage()) {
                 Promotion.observeLazyLoading();
+                Promotion.addWindowStats();
             }
         },
         
@@ -1491,6 +1494,7 @@
                 
                 setTimeout(() => {
                     Promotion.addTotalColumn();
+                    Promotion.addWindowStats();
                 }, 1500);
             } else {
                 UI.log('❌ 未找到提交按钮');
@@ -1545,16 +1549,86 @@
             UI.log('✅ 已添加合计列');
         },
         
-        observeLazyLoading: () => {
-            const tableBody = document.querySelector('.table_body');
-            if (!tableBody) return;
+        addWindowStats: () => {
+            // 在页面统计面板(.board)末尾注入"近30天累计转存"、"近90天累计转存"两项
+            // 口径：累计转存 = 移动转存数 + PC转存数；按表格「日期」列归属窗口（含今天）
+            const board = document.querySelector('.board');
+            if (!board) return;
 
-            const observer = new MutationObserver(() => {
-                Promotion.addHeaderColumn();
-                Promotion.addTotalToAllRows();
+            const parseDate = (text) => {
+                const m = text.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+                if (!m) return null;
+                const d = new Date(parseInt(m[1], 10), parseInt(m[2], 10) - 1, parseInt(m[3], 10));
+                return isNaN(d.getTime()) ? null : d;
+            };
+
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const start30 = new Date(today);
+            start30.setDate(today.getDate() - 29);
+            const start90 = new Date(today);
+            start90.setDate(today.getDate() - 89);
+
+            let sum30 = 0;
+            let sum90 = 0;
+            document.querySelectorAll('.row.table_body_item').forEach((row) => {
+                const cells = row.querySelectorAll('div');
+                const date = parseDate((cells[0]?.textContent || '').trim());
+                if (!date) return;
+                const mobile = parseFloat(cells[4]?.textContent.trim()) || 0;
+                const pc = parseFloat(cells[5]?.textContent.trim()) || 0;
+                const total = mobile + pc;
+                if (date >= start30 && date <= today) sum30 += total;
+                if (date >= start90 && date <= today) sum90 += total;
             });
 
-            observer.observe(tableBody, { childList: true, subtree: true });
+            const fmt = (v) => Number.isInteger(v) ? String(v) : v.toFixed(2);
+            const items = [
+                { key: 'd30', label: '近30天累计转存', value: fmt(sum30) },
+                { key: 'd90', label: '近90天累计转存', value: fmt(sum90) }
+            ];
+
+            items.forEach((it) => {
+                let item = board.querySelector('.board_item.quark-stats-item[data-key="' + it.key + '"]');
+                if (!item) {
+                    item = document.createElement('div');
+                    item.className = 'board_item quark-stats-item';
+                    item.setAttribute('data-key', it.key);
+                    const num = document.createElement('div');
+                    num.className = 'num';
+                    const desc = document.createElement('div');
+                    desc.className = 'desc';
+                    item.appendChild(num);
+                    item.appendChild(desc);
+                    board.appendChild(item);
+                }
+                item.querySelector('.num').textContent = it.value;
+                item.querySelector('.desc').textContent = it.label;
+            });
+        },
+        
+        observeLazyLoading: () => {
+            const tableBody = document.querySelector('.table_body');
+            if (tableBody) {
+                const observer = new MutationObserver(() => {
+                    Promotion.addHeaderColumn();
+                    Promotion.addTotalToAllRows();
+                    Promotion.addWindowStats();
+                });
+                observer.observe(tableBody, { childList: true, subtree: true });
+            }
+
+            // 兜底：滚动懒加载页面（如 g_sfxmsj）即使容器选择器不同，滚动后也会重算
+            let scrollTimer = null;
+            window.addEventListener('scroll', () => {
+                if (scrollTimer) return;
+                scrollTimer = setTimeout(() => {
+                    scrollTimer = null;
+                    Promotion.addHeaderColumn();
+                    Promotion.addTotalToAllRows();
+                    Promotion.addWindowStats();
+                }, 300);
+            }, { passive: true });
             UI.log('✅ 已启动懒加载观察');
         }
     };
