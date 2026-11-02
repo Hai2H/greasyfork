@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         夸克资源助手
 // @namespace    http://tampermonkey.net/
-// @version      6.1.1
+// @version      6.1.2
 // @description  💬智能回帖 | 📦资源采集 | 📊推广查询 - 简洁实用的多功能助手
 // @match        https://kuafuzys.net/*
 // @match        https://www.kuafuzy.com/*
@@ -27,7 +27,7 @@
     // 配置模块
     // ========================================
     const CONFIG = {
-        version: '6.1.1',
+        version: '6.1.2',
         
         // 选择器配置
         selectors: {
@@ -1510,11 +1510,14 @@
         },
         
         calculateTotal: (cells) => {
-            const col1 = parseFloat(cells[2]?.textContent.trim()) || 0;
-            const col2 = parseFloat(cells[3]?.textContent.trim()) || 0;
-            const col3 = parseFloat(cells[4]?.textContent.trim()) || 0;
-            const col4 = parseFloat(cells[5]?.textContent.trim()) || 0;
-            return col1 * 7 + col2 * 3 + col3 * 0.3 + col4;
+            // 合计 = 移动拉新×10 + PC拉新×3 + 移动转存×0.47 + PC转存×0.22 + 会员分成
+            // 2026-11-02 更新单价：移动转存 0.3→0.47，PC转存 1→0.22，新增会员分成列
+            const col1 = parseFloat(cells[2]?.textContent.trim()) || 0;   // 移动拉新数
+            const col2 = parseFloat(cells[3]?.textContent.trim()) || 0;   // PC拉新数
+            const col3 = parseFloat(cells[4]?.textContent.trim()) || 0;   // 移动转存数
+            const col4 = parseFloat(cells[5]?.textContent.trim()) || 0;   // PC转存数
+            const col5 = parseFloat(cells[6]?.textContent.trim()) || 0;   // 会员分成
+            return col1 * 10 + col2 * 3 + col3 * 0.47 + col4 * 0.22 + col5;
         },
         
         addTotalColumnToRow: (row) => {
